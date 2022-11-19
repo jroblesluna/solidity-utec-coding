@@ -106,8 +106,8 @@ contract Airdrop is AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    // mapping(address => ??) _whiteList;
-    // mapping(address => ??) _blueList;
+    mapping(address => uint256) _whiteList;
+    mapping(address => uint256) _blueList;
 
     function addToWhiteListBatch(address[] memory _addresses)
         public
@@ -115,23 +115,24 @@ contract Airdrop is AccessControl {
     {
         uint256 _length = _addresses.length;
         for (uint256 i = 0; i < _length; i++) {
-            // _whiteList
+            _whiteList[_addresses[i]]=block.timestamp;
         }
     }
 
     function mintWithWhiteList() external {
         // accede a la informacion de msg.sender en _whiteList
         // verifica si esta en whitelist
-        // require(?, "Participante no esta en whitelist");
+        require(_whiteList[msg.sender]>0, "Participante no esta en whitelist");
 
         // valida que no hayan pasado mas de 24 h
-        // require(?, "Pasaron mas de 24 horas");
+        require(block.timestamp-_whiteList[msg.sender]<1 days, "Pasaron mas de 24 horas");
 
         // entrega tokens a msg.sender
         uint256 _amntTokens = _getRandom();
         ITokenAIRDRP(tokenAIRDRPAddress).mint(msg.sender, _amntTokens);
 
         // eliminar de whitelist a msg.sender
+        delete _whiteList[msg.sender];
     }
 
     function addToBlueListBatch(address[] memory _addresses)
@@ -140,7 +141,7 @@ contract Airdrop is AccessControl {
     {
         uint256 _length = _addresses.length;
         for (uint256 i = 0; i < _length; i++) {
-            // _blueList
+            _blueList[_addresses[i]]=block.timestamp;
         }
     }
 
@@ -148,11 +149,13 @@ contract Airdrop is AccessControl {
         // accede a la informacion de msg.sender en _blueList
 
         // verifica si esta en bluelist
+        require(_blueList[msg.sender]>0,"Participante no esta en bluelist");
+        require(block.timestamp-_blueList[msg.sender]<3600,"Pasaron mas de 60 minutos");
 
-        uint256 tEnQueIngresoMsgSender; // /** pasa el tiempo en el que ingreso*/
+        uint256 tEnQueIngresoMsgSender = _blueList[msg.sender]; // /** pasa el tiempo en el que ingreso*/
         uint256 _amntTokens = _getTokensBasedOnTime(tEnQueIngresoMsgSender);
         ITokenAIRDRP(tokenAIRDRPAddress).mint(msg.sender, _amntTokens);
-
+        delete _blueList[msg.sender];
         // eliminar de blue list
     }
 
@@ -160,14 +163,15 @@ contract Airdrop is AccessControl {
         // usar amntTokensToBurn que es igual a 1,000 tokens
         // incluye validaciones
         uint256 bal = ITokenAIRDRP(tokenAIRDRPAddress).balanceOf(msg.sender);
-        // require(bal?, "No tiene suficientes tokens para quemar");
+        require(bal>=1000*10**18, "No tiene suficientes tokens para quemar");
 
-        // require(?, "Esta en lista blanca");
+        require(_whiteList[msg.sender]==0,"Esta en lista blanca");
 
         // burn tokens del caller
         ITokenAIRDRP(tokenAIRDRPAddress).burn(msg.sender, amntTokensToBurn);
 
         // ingresa a msg.sender en lista blanca
+        _whiteList[msg.sender]=block.timestamp;
     }
 
     //////////////////////////////////////////////////
@@ -186,25 +190,22 @@ contract Airdrop is AccessControl {
         // r: tiempo restante para completar 60 minutos
         // m + r = 60 minutos
 
-        uint256 totalTime = 60 * 60; // m + r -> 60 min x 60 sec
-        uint256 timePased; // m -> block.timestamp - _enterTime
-        require(totalTime > timePased, "Pasaron mas de 60 minutos");
+        uint256 totalTime = 3600; // m + r -> 60 min x 60 sec
+        uint256 timePassed = block.timestamp - _enterTime; // m -> block.timestamp - _enterTime
+        //require(totalTime > timePased, "Pasaron mas de 60 minutos");
 
-        uint256 remainingTime; // r -> totalTime - m
-        // tokens a entregar = (r * prizeTokensBlueList) / ( m + r)
-        return 0;
+        uint256 remainingTime = totalTime-timePassed; // r -> totalTime - m
+        return prizeTokensBlueList*remainingTime/totalTime;
     }
 
     function _getRandom() internal view returns (uint256) {
         // denro de "abi.encodePacked" se pueden añadir tantas varialbes globales como sean posibles
         // lo importante es que devuelve un numero random cada vez que ejecuta el metodo
-        // random =  uint256(keccak256(abi.encodePacked(msg.sender, address(this), block.timestamp)))
+        uint256 random =  uint256(keccak256(abi.encodePacked(msg.sender, address(this), block.timestamp)));
+        uint256 prize = random % 1000 + 1;
         // user el mod % N para encontrar un numero random menor a N
         // el mod % empieza en cero
         // multiplicar por 10**18 por los decimales
-
-        uint256 random = 0;
-
-        return random * 10**18;
+        return prize * 10**18;
     }
 }

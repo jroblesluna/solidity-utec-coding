@@ -149,15 +149,21 @@ interface IERC20 {
 }
 
 /**is IERC20, IERC20Metadata */
-contract TokenERC20_1 {
+contract TokenERC20_1 is IERC20, AccessControlLearning {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
     uint256 totalMinted;
 
     // mapping de balances
+    mapping (address => uint256) balances;
 
     // mapping de permisos
     // owner => spender => amount
+    mapping (address => mapping (address => uint256)) allowances;
+
+    string private name_;
+    string private symbol_;
+    uint8 private decimals_;
 
     // 3. Nombre, símbolo y decimales serán incluidos en el smart contract a través del constructor
     constructor(
@@ -165,28 +171,46 @@ contract TokenERC20_1 {
         string memory _symbol,
         uint8 _decimals
     ) {
-        // name_ = _name;
-        // symbol_ = _symbol;
-        // decimals_ = _decimals;
+        name_ = _name;
+        symbol_ = _symbol;
+        decimals_ = _decimals;
     }
 
     /////////////////////////////////////////////////////////////////////////////
     ///////////     2. Heredar la interface IERC20Metadata            ///////////
     /////////////////////////////////////////////////////////////////////////////
-    function name() public view returns (string memory) {}
+    function name() public view returns (string memory) {
+        return name_;
+    }
 
     // symbol
+    function symbol() public view returns (string memory) {
+        return symbol_;
+    }
+
 
     // decimals
+    function decimals() public view returns (uint8) {
+        return decimals_;
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     ///////////         1.  Heredar la interface IERC20               ///////////
     /////////////////////////////////////////////////////////////////////////////
-    function totalSupply() public view returns (uint256) {}
+    function totalSupply() public view returns (uint256) {
+        return totalMinted;
+    }
 
-    function balanceOf(address account) public view returns (uint256) {}
+    function balanceOf(address account) public view returns (uint256) {
+        return balances[account];
+    }
 
     function transfer(address to, uint256 amount) public returns (bool) {
+        require(balances[msg.sender]>=amount,"No tiene saldo suficiente");
+        balances[msg.sender]-=amount;
+        balances[to]+=amount;
+        emit Transfer(msg.sender, to, amount);
         return true;
     }
 
@@ -194,9 +218,15 @@ contract TokenERC20_1 {
         public
         view
         returns (uint256)
-    {}
+    {
+        return allowances[owner][spender];
+    }
 
     function approve(address spender, uint256 amount) public returns (bool) {
+        require (spender!=address(0),"Spender no puede ser zero");
+        require (balances[msg.sender]>=amount,"No tiene saldo suficiente para aprobar el monto");
+        allowances[msg.sender][spender]=amount;
+        emit Approval(msg.sender, spender, amount);
         return true;
     }
 
@@ -205,6 +235,12 @@ contract TokenERC20_1 {
         address to,
         uint256 amount
     ) public returns (bool) {
+        require(allowances[from][msg.sender]>=amount);
+        require (balances[from]>=amount,"No tiene saldo suficiente para aprobar el monto");
+        balances[from]-=amount;
+        balances[to]+=amount;
+        allowances[from][msg.sender]-=amount;
+        emit Transfer(from, to, amount);
         return true;
     }
 
@@ -213,15 +249,41 @@ contract TokenERC20_1 {
     /////////////////////////////////////////////////////////////////////////////
 
     // 3. mint
-    function mint(address to, uint256 amount) public {}
+    function mint(address to, uint256 amount) public {
+        require (to!=address(0),"Mint a favor del address zero");
+        balances[to]+=amount;
+        totalMinted+=amount;
+        emit Transfer(address(0), to, amount);
+    }
 
     // 4. burn
-    function burn(uint256 amount) public {}
+    function burn(uint256 amount) public {
+        require (msg.sender!=address(0),"Se quema tokens de address zero");
+        require (balances[msg.sender]>amount,"Cuenta no tiene suficientes tokens");
+        balances[msg.sender]-=amount;
+        totalMinted-=amount;
+        emit Transfer(msg.sender, address(0), amount);
+    }
 
     // EXTRA
-    // function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool){}
+    function decreaseAllowance(address spender, uint256 substractedValue) public returns (bool){
+        require(allowances[msg.sender][spender]>=substractedValue,"Monto no puede ser mayor al allowed");
+        allowances[msg.sender][spender]-=substractedValue;
+        emit Approval(msg.sender, spender, allowances[msg.sender][spender]);
+        return true;
+    }
 
-    // function increaseAllowance(address spender, uint256 addedValue) public  returns (bool){}
+    function increaseAllowance(address spender, uint256 addedValue) public  returns (bool){
+        require(balances[msg.sender]-allowances[msg.sender][spender]>=addedValue,"Monto no puede ser mayor al not yet allowed");
+        allowances[msg.sender][spender]+=addedValue;
+        emit Approval(msg.sender, spender, allowances[msg.sender][spender]);
+        return true;
+    }
 
-    // function mintProtected(address to, uint256 amount) public onlyRole(MINTER_ROLE) {}
+    function mintProtected(address to, uint256 amount) public onlyRole (MINTER_ROLE) {
+        require (to!=address(0),"Mint a favor del address zero");
+        balances[to]+=amount;
+        totalMinted+=amount;
+        emit Transfer(address(0), to, amount);
+    }
 }
